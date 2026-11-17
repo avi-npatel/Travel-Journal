@@ -1,0 +1,911 @@
+@import "tailwindcss";
+
+/* `dark:` utilities follow the data-theme attribute set by the theme script. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ------------------------------------------------------------------------
+   Tokens
+   Light: warm paper, near-black ink, one vermilion accent (pins in ink).
+   Dark:  near-black, flat neon red accent, electric cyan reserved for map pins.
+   ------------------------------------------------------------------------ */
+
+:root {
+  color-scheme: light;
+
+  --paper: #f4efe6;
+  --raised: #fbf8f2;
+  --sunk: #eae3d6;
+  --ink: #17140f;
+  --ink-soft: #3d382f;
+  --muted: #6b6457;
+  --rule: #d9d1c2;
+  --accent: #be2f16;
+  --on-accent: #ffffff;
+  /* Pins are ink, not accent: they sit on top of accent-filled countries. */
+  --pin: #17140f;
+  --danger: #a3200d;
+
+  /* Maps */
+  --map-water: #f4efe6;
+  --map-land: #e2dacb;
+  --map-border: #f4efe6;
+  --map-visited: #be2f16;
+  --map-visited-line: #be2f16;
+  --map-route: #17140f;
+  --map-graticule: #d9d1c2;
+
+  /* Glows only exist in dark mode. */
+  --glow-text: none;
+  --glow-line: none;
+  --glow-pin: none;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --paper: #0a0b0d;
+  --raised: #121418;
+  --sunk: #060708;
+  --ink: #e9e6df;
+  --ink-soft: #c9c5bc;
+  --muted: #9a978f;
+  --rule: #25282e;
+  --accent: #ff4438;
+  --on-accent: #0a0b0d;
+  --pin: #2de2ff;
+  --danger: #ff8a7a;
+
+  --map-water: #0a0b0d;
+  --map-land: #181b20;
+  --map-border: #0a0b0d;
+  --map-visited: #4a1613;
+  --map-visited-line: #ff4438;
+  --map-route: #ff4438;
+  --map-graticule: #1b1e23;
+
+  --glow-text: 0 0 22px rgb(255 68 56 / 0.5);
+  --glow-line: 0 0 0 1px rgb(255 68 56 / 0.55), 0 0 18px rgb(255 68 56 / 0.2);
+  --glow-pin: drop-shadow(0 0 5px rgb(45 226 255 / 0.85));
+}
+
+@theme inline {
+  --font-display: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-schibsted), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --color-paper: var(--paper);
+  --color-raised: var(--raised);
+  --color-sunk: var(--sunk);
+  --color-ink: var(--ink);
+  --color-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-pin: var(--pin);
+  --color-danger: var(--danger);
+}
+
+/* ------------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------------ */
+
+@layer base {
+  html {
+    background: var(--paper);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  a {
+    text-underline-offset: 0.22em;
+    text-decoration-thickness: 1px;
+  }
+
+  button,
+  [role="button"],
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* Everything animated on the site is short and optional. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------------------
+   Type
+   ------------------------------------------------------------------------ */
+
+@layer components {
+  /* Headlines: Fraunces with its softness and "wonk" turned off, so it reads
+     as a sharp book face rather than a quirky one. */
+  .display {
+    font-family: var(--font-display);
+    font-variation-settings:
+      "SOFT" 0,
+      "WONK" 0;
+    font-optical-sizing: auto;
+    font-weight: 400;
+    letter-spacing: -0.028em;
+    line-height: 0.96;
+    text-wrap: balance;
+  }
+
+  .display em,
+  .display-italic {
+    font-style: italic;
+    font-weight: 350;
+    letter-spacing: -0.02em;
+  }
+
+  /* Dates, coordinates, distances, labels: mono small caps. */
+  .meta {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    line-height: 1.5;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meta-ink {
+    color: var(--ink);
+  }
+
+  .link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+
+  .link:hover {
+    text-decoration-color: var(--accent);
+  }
+
+  /* Page gutters shared by every section. */
+  .shell {
+    width: 100%;
+    max-width: 92rem;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 4vw, 3.5rem);
+  }
+
+  /* ----------------------------------------------------------------------
+     Rich text (trip descriptions, About)
+     ---------------------------------------------------------------------- */
+
+  .prose-journal {
+    max-width: 38rem;
+    font-size: 1.0625rem;
+    line-height: 1.75;
+    color: var(--ink-soft);
+  }
+
+  .prose-journal > * + * {
+    margin-top: 1.25em;
+  }
+
+  .prose-journal h2,
+  .prose-journal h3 {
+    font-family: var(--font-display);
+    font-variation-settings:
+      "SOFT" 0,
+      "WONK" 0;
+    font-weight: 450;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: var(--ink);
+  }
+
+  .prose-journal h2 {
+    font-size: 1.875rem;
+    margin-top: 2.2em;
+  }
+
+  .prose-journal h3 {
+    font-size: 1.375rem;
+    margin-top: 1.8em;
+  }
+
+  .prose-journal > :first-child {
+    margin-top: 0;
+  }
+
+  .prose-journal a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+
+  .prose-journal a:hover {
+    text-decoration-color: var(--accent);
+  }
+
+  .prose-journal strong {
+    font-weight: 650;
+    color: var(--ink);
+  }
+
+  .prose-journal ul,
+  .prose-journal ol {
+    padding-left: 1.3em;
+  }
+
+  .prose-journal ul {
+    list-style: disc;
+  }
+
+  .prose-journal ol {
+    list-style: decimal;
+  }
+
+  .prose-journal li + li {
+    margin-top: 0.4em;
+  }
+
+  .prose-journal li::marker {
+    color: var(--muted);
+  }
+
+  .prose-journal blockquote {
+    border-left: 2px solid var(--accent);
+    padding-left: 1.1em;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 1.25rem;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  /* ----------------------------------------------------------------------
+     Home hero
+     ---------------------------------------------------------------------- */
+
+  /* Darkens the lower part of the hero photo so the title stays readable.
+     Written with plain rgb() stops, which every browser paints the same. */
+  .hero-scrim {
+    background-image: linear-gradient(
+      to top,
+      rgb(0 0 0 / 0.78) 0%,
+      rgb(0 0 0 / 0.3) 38%,
+      rgb(0 0 0 / 0.08) 70%,
+      rgb(0 0 0 / 0.12) 100%
+    );
+  }
+
+  /* ----------------------------------------------------------------------
+     Stats strip
+     ---------------------------------------------------------------------- */
+
+  .stat-number {
+    font-family: var(--font-display);
+    font-variation-settings:
+      "SOFT" 0,
+      "WONK" 0;
+    font-weight: 350;
+    font-size: clamp(3rem, 8vw, 6.5rem);
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    color: var(--accent);
+    text-shadow: var(--glow-text);
+    font-variant-numeric: lining-nums;
+  }
+
+  /* ----------------------------------------------------------------------
+     Gallery: justified rows
+     Each tile grows in proportion to its aspect ratio (--ar), so every row
+     fills the width and every photo keeps its shape. No JavaScript.
+     ---------------------------------------------------------------------- */
+
+  .gallery {
+    --row: 150px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  @media (min-width: 640px) {
+    .gallery {
+      --row: 240px;
+      gap: 8px;
+    }
+  }
+
+  @media (min-width: 1100px) {
+    .gallery {
+      --row: 330px;
+      gap: 10px;
+    }
+  }
+
+  .gallery-item {
+    position: relative;
+    flex-grow: calc(var(--ar) * 100);
+    flex-basis: calc(var(--ar) * var(--row));
+    aspect-ratio: var(--ar);
+    overflow: hidden;
+    background: var(--sunk);
+  }
+
+  /* Stops the last row from stretching a lone photo across the page. */
+  .gallery::after {
+    content: "";
+    flex-grow: 1000000;
+  }
+
+  .gallery-item img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition:
+      transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1),
+      opacity 0.3s;
+  }
+
+  .gallery-item:hover img {
+    transform: scale(1.025);
+  }
+
+  .gallery-item:focus-visible {
+    outline-offset: -2px;
+    z-index: 1;
+  }
+
+  [data-theme="dark"] .gallery-item:hover,
+  [data-theme="dark"] .gallery-item:focus-visible {
+    box-shadow: var(--glow-line);
+    z-index: 1;
+  }
+
+  /* ----------------------------------------------------------------------
+     Boarding pass (trip header)
+     ---------------------------------------------------------------------- */
+
+  .pass {
+    --notch: 9px;
+    position: relative;
+    display: grid;
+    border: 1px solid var(--ink);
+    border-radius: 10px;
+    background: var(--raised);
+  }
+
+  [data-theme="dark"] .pass {
+    border-color: var(--rule);
+    box-shadow: var(--glow-line);
+  }
+
+  .pass-main {
+    padding: clamp(1.1rem, 2.4vw, 1.9rem);
+  }
+
+  .pass-stub {
+    position: relative;
+    padding: clamp(1.1rem, 2.4vw, 1.9rem);
+    border-top: 1px dashed var(--muted);
+  }
+
+  /* The half-circles punched out where the stub tears off. */
+  .pass-stub::before,
+  .pass-stub::after {
+    content: "";
+    position: absolute;
+    top: calc(var(--notch) * -1);
+    width: calc(var(--notch) * 2);
+    height: calc(var(--notch) * 2);
+    border-radius: 50%;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    clip-path: inset(0 0 0 50%);
+    left: calc(var(--notch) * -1 - 1px);
+  }
+
+  .pass-stub::after {
+    left: auto;
+    right: calc(var(--notch) * -1 - 1px);
+    clip-path: inset(0 50% 0 0);
+  }
+
+  [data-theme="dark"] .pass-stub::before,
+  [data-theme="dark"] .pass-stub::after {
+    border-color: var(--rule);
+  }
+
+  @media (min-width: 900px) {
+    .pass {
+      grid-template-columns: minmax(0, 1fr) 15rem;
+    }
+
+    .pass-stub {
+      border-top: 0;
+      border-left: 1px dashed var(--muted);
+    }
+
+    .pass-stub::before,
+    .pass-stub::after {
+      left: calc(var(--notch) * -1);
+      right: auto;
+      top: calc(var(--notch) * -1 - 1px);
+      clip-path: inset(50% 0 0 0);
+    }
+
+    .pass-stub::after {
+      top: auto;
+      bottom: calc(var(--notch) * -1 - 1px);
+      clip-path: inset(0 0 50% 0);
+    }
+  }
+
+  .pass-code {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: clamp(2rem, 5.5vw, 3.5rem);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+
+  /* ----------------------------------------------------------------------
+     Departures-board list (trips list view, home "recent" list)
+     ---------------------------------------------------------------------- */
+
+  .board-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.15rem 1rem;
+    align-items: baseline;
+    padding: 0.95rem 0.25rem;
+    border-bottom: 1px solid var(--rule);
+    transition:
+      background-color 0.2s,
+      box-shadow 0.2s;
+  }
+
+  .board-row:hover,
+  .board-row:focus-visible {
+    background: var(--raised);
+  }
+
+  [data-theme="dark"] .board-row:hover,
+  [data-theme="dark"] .board-row:focus-visible {
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  .board-row:hover .board-title,
+  .board-row:focus-visible .board-title {
+    color: var(--accent);
+  }
+
+  @media (min-width: 768px) {
+    .board-row,
+    .board-head {
+      grid-template-columns: 9.5rem minmax(0, 1fr) 13rem 6.5rem 4.5rem;
+      gap: 1.25rem;
+      padding-inline: 0.75rem;
+    }
+  }
+
+  .board-head {
+    display: none;
+    padding-block: 0.6rem;
+    border-bottom: 1px solid var(--ink);
+  }
+
+  @media (min-width: 768px) {
+    .board-head {
+      display: grid;
+    }
+  }
+
+  .board-title {
+    font-family: var(--font-display);
+    font-variation-settings:
+      "SOFT" 0,
+      "WONK" 0;
+    font-size: clamp(1.35rem, 2.2vw, 1.75rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    transition: color 0.2s;
+  }
+
+  /* ----------------------------------------------------------------------
+     Buttons and form controls (mostly /admin)
+     ---------------------------------------------------------------------- */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition:
+      background-color 0.15s,
+      color 0.15s,
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+
+  .btn:hover:not(:disabled) {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 86%, var(--ink));
+    border-color: color-mix(in srgb, var(--accent) 86%, var(--ink));
+    color: var(--on-accent);
+  }
+
+  .btn-quiet {
+    border-color: var(--rule);
+    color: var(--ink-soft);
+  }
+
+  .btn-quiet:hover:not(:disabled) {
+    background: transparent;
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+
+  .btn-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--paper);
+  }
+
+  .btn-sm {
+    min-height: 2rem;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.6875rem;
+  }
+
+  .field {
+    display: block;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--raised);
+    color: var(--ink);
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1.4;
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+
+  .field::placeholder {
+    color: color-mix(in srgb, var(--muted) 75%, transparent);
+  }
+
+  .field:hover {
+    border-color: var(--muted);
+  }
+
+  .field:focus-visible,
+  .field:focus-within {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .hint {
+    margin-top: 0.4rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.3rem 0.2rem 0.55rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--paper);
+    font-size: 0.875rem;
+    line-height: 1.3;
+  }
+
+  .chip-remove {
+    display: grid;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 2px;
+    color: var(--muted);
+  }
+
+  .chip-remove:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  /* Tags and filters on the public site. */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0.25rem 0.7rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    transition:
+      border-color 0.15s,
+      color 0.15s,
+      background-color 0.15s;
+  }
+
+  .tag:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+
+  .tag[aria-pressed="true"],
+  .tag[aria-current="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+}
+
+/* ------------------------------------------------------------------------
+   Motion
+   ------------------------------------------------------------------------ */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+/* Tiles fade up as they scroll into view, in browsers that can drive an
+   animation from scroll position. Elsewhere they are simply visible. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: rise-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 30%;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------------
+   Lightbox
+   ------------------------------------------------------------------------ */
+
+.lightbox {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #060607;
+  color: #ecebe6;
+  overflow: hidden;
+}
+
+.lightbox::backdrop {
+  background: #060607;
+}
+
+.lightbox[open] {
+  animation: fade-in 0.25s ease-out;
+}
+
+.lightbox-photo {
+  animation: fade-in 0.3s ease-out;
+}
+
+.lightbox-button {
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  color: #ecebe6;
+  background: rgb(255 255 255 / 0.06);
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.lightbox-button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.16);
+}
+
+.lightbox-button:disabled {
+  opacity: 0.25;
+}
+
+.lightbox :focus-visible {
+  outline-color: #ff4438;
+}
+
+/* ------------------------------------------------------------------------
+   Maps
+   ------------------------------------------------------------------------ */
+
+.map-pin {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  /* The visible dot is smaller than the 22px hit area. */
+  background: radial-gradient(circle, var(--pin) 0 4.5px, var(--paper) 5px 6.5px, transparent 7px);
+  filter: var(--glow-pin);
+  transition: scale 0.18s ease-out;
+}
+
+.map-pin::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1.5px solid var(--pin);
+  border-radius: 50%;
+  opacity: 0;
+  scale: 0.6;
+  transition:
+    opacity 0.18s,
+    scale 0.18s;
+}
+
+.map-pin:hover,
+.map-pin:focus-visible,
+.map-pin[data-active="true"] {
+  scale: 1.25;
+  z-index: 2;
+}
+
+.map-pin:hover::after,
+.map-pin:focus-visible::after,
+.map-pin[data-active="true"]::after {
+  opacity: 1;
+  scale: 1;
+}
+
+.map-pin:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.maplibregl-map {
+  font: inherit;
+}
+
+.maplibregl-popup-content {
+  padding: 0.6rem 0.8rem !important;
+  border: 1px solid var(--ink);
+  border-radius: 4px !important;
+  background: var(--raised) !important;
+  color: var(--ink);
+  box-shadow: none !important;
+}
+
+[data-theme="dark"] .maplibregl-popup-content {
+  border-color: var(--accent);
+  box-shadow: var(--glow-line) !important;
+}
+
+.maplibregl-popup-tip {
+  display: none;
+}
+
+.maplibregl-ctrl-group {
+  border: 1px solid var(--rule);
+  border-radius: 4px !important;
+  background: var(--raised) !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--rule) !important;
+}
+
+[data-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+
+/* ------------------------------------------------------------------------
+   Rich text editor (admin)
+   ------------------------------------------------------------------------ */
+
+.editor-content .tiptap {
+  min-height: 14rem;
+  padding: 0.9rem 1rem 1.2rem;
+  outline: none;
+}
+
+.editor-content .tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted);
+  pointer-events: none;
+}

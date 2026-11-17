@@ -1,9 +1,9 @@
 import Image from "next/image";
 import { photoUrl } from "@/lib/images";
-import type { Photo as PhotoRow } from "@/lib/types";
+import type { StoredImage } from "@/lib/types";
 
 interface PhotoProps {
-  photo: PhotoRow;
+  photo: StoredImage;
   alt: string;
   /** How wide the image is on screen, e.g. "(min-width: 768px) 50vw, 100vw". */
   sizes: string;

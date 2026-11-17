@@ -1,6 +1,9 @@
 import { Suspense } from "react";
 import { TripEditor } from "@/components/admin/TripEditor";
 
+// Loaded in the browser as the signed-in admin; not part of instant-navigation checks.
+export const instant = false;
+
 /**
  * Edit one trip. The id in the URL is only known per request, so it is read
  * inside <Suspense>; the editor then loads the trip in the browser, as the

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Photo } from "@/components/site/Photo";
 import { StatsStrip } from "@/components/site/StatsStrip";
 import { getPublishedTrips, getSettings } from "@/lib/data";
 import { formatCoordinates, homePoint } from "@/lib/geo";
@@ -32,6 +33,19 @@ export default async function AboutPage() {
             <dd className="mt-3 font-display text-xl">{settings.home_name}</dd>
             <dd className="meta mt-1">{formatCoordinates(homePoint(settings))}</dd>
           </div>
+          {settings.portrait && (
+            <div className="pt-4">
+              <dt className="sr-only">Portrait</dt>
+              <dd className="max-w-sm lg:max-w-none">
+                <Photo
+                  photo={settings.portrait}
+                  alt={settings.portrait_alt.trim() || `Portrait of the author of ${settings.site_title}`}
+                  sizes="(min-width: 1024px) 30vw, 384px"
+                  className="h-auto w-full"
+                />
+              </dd>
+            </div>
+          )}
         </dl>
       </div>
 

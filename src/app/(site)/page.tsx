@@ -2,11 +2,11 @@ import Link from "next/link";
 import { HomeHero } from "@/components/site/HomeHero";
 import { StatsStrip } from "@/components/site/StatsStrip";
 import { TripCard } from "@/components/site/TripCard";
-import { WorldMap, type MapTrip } from "@/components/site/WorldMap";
+import { WorldMap, type WorldMapPin } from "@/components/site/WorldMap";
 import { getPublishedTrips, getSettings } from "@/lib/data";
 import { formatTripDates } from "@/lib/dates";
-import { homePoint, tripPoint } from "@/lib/geo";
-import { numberTrips } from "@/lib/site";
+import { homePoint, mapPins } from "@/lib/geo";
+import { numberTrips, placePath } from "@/lib/site";
 import { computeStats, visitedCountryCodes } from "@/lib/stats";
 
 const RECENT_COUNT = 5;
@@ -44,11 +44,15 @@ export default async function HomePage() {
   const heroTrip = trips.find((trip) => trip.cover) ?? trips[0];
   const recent = trips.slice(0, RECENT_COUNT);
 
-  const mapTrips: MapTrip[] = trips.flatMap((trip) => {
-    const point = tripPoint(trip);
-    if (!point) return [];
-    const label = [trip.title, formatTripDates(trip)].filter(Boolean).join(" · ");
-    return [{ slug: trip.slug, title: trip.title, label, point }];
+  const mapPinsForHome: WorldMapPin[] = trips.flatMap((trip) => {
+    const when = formatTripDates(trip);
+    return mapPins(trip).map((pin) => ({
+      key: `${trip.id}-${pin.key}`,
+      href: placePath(trip, pin.name),
+      label: [pin.name, trip.title, when].filter(Boolean).join(" · "),
+      point: pin.point,
+      showRoute: pin.showRoute,
+    }));
   });
 
   return (
@@ -81,7 +85,7 @@ export default async function HomePage() {
           </Link>
         </div>
         <div className="mt-8 sm:mt-12">
-          <WorldMap visitedCodes={visitedCountryCodes(trips, settings)} trips={mapTrips} home={home} />
+          <WorldMap visitedCodes={visitedCountryCodes(trips, settings)} pins={mapPinsForHome} home={home} />
         </div>
         <p className="meta mt-5 flex flex-wrap gap-x-6 gap-y-1">
           <span>

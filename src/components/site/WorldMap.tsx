@@ -5,17 +5,20 @@ import { getCountry } from "@/lib/countries";
 import { COUNTRY_OUTLINES, OUTLINED_CODES } from "@/lib/map/atlas";
 import type { LatLng } from "@/lib/types";
 
-export interface MapTrip {
-  slug: string;
-  title: string;
-  /** Shown as the pin's tooltip, e.g. "Tromso · Mar 2026". */
+/** One pin on the home map, linking to its trip. */
+export interface WorldMapPin {
+  key: string;
+  href: string;
+  /** Shown as the pin's tooltip, e.g. "London · UK Trip · Dec 2024". */
   label: string;
   point: LatLng;
+  /** Draw a route line from home to this pin. */
+  showRoute: boolean;
 }
 
 interface WorldMapProps {
   visitedCodes: string[];
-  trips: MapTrip[];
+  pins: WorldMapPin[];
   home: LatLng;
 }
 
@@ -36,10 +39,11 @@ const project = ({ lat, lng }: LatLng) => projection([lng, lat]) ?? [0, 0];
 
 /**
  * The home page map: plain SVG drawn on the server, so it costs the visitor
- * no JavaScript. Visited countries are filled, each trip gets a pin that
- * links to it, and thin great-circle lines run out from home.
+ * no JavaScript. Visited countries are filled, each place gets a pin that
+ * links to its trip, and thin great-circle lines run out from home to the
+ * places that have a route.
  */
-export function WorldMap({ visitedCodes, trips, home }: WorldMapProps) {
+export function WorldMap({ visitedCodes, pins, home }: WorldMapProps) {
   const visited = new Set(visitedCodes);
   const unvisitedPath = COUNTRY_PATHS.filter((c) => !c.code || !visited.has(c.code))
     .map((c) => c.d)
@@ -92,36 +96,33 @@ export function WorldMap({ visitedCodes, trips, home }: WorldMapProps) {
         strokeLinecap="round"
         opacity="0.7"
       >
-        {trips.map((trip) => (
-          <path
-            key={trip.slug}
-            d={
-              path({
-                type: "LineString",
-                coordinates: [
-                  [home.lng, home.lat],
-                  [trip.point.lng, trip.point.lat],
-                ],
-              }) ?? ""
-            }
-          />
-        ))}
+        {pins
+          .filter((pin) => pin.showRoute)
+          .map((pin) => (
+            <path
+              key={pin.key}
+              d={
+                path({
+                  type: "LineString",
+                  coordinates: [
+                    [home.lng, home.lat],
+                    [pin.point.lng, pin.point.lat],
+                  ],
+                }) ?? ""
+              }
+            />
+          ))}
       </g>
 
       <circle cx={homeX} cy={homeY} r="3.2" fill="var(--paper)" stroke="var(--ink)" strokeWidth="1.2">
         <title>Home</title>
       </circle>
 
-      {trips.map((trip) => {
-        const [x, y] = project(trip.point);
+      {pins.map((pin) => {
+        const [x, y] = project(pin.point);
         return (
-          <Link
-            key={trip.slug}
-            href={`/trips/${trip.slug}`}
-            className="group outline-none"
-            aria-label={trip.label}
-          >
-            <title>{trip.label}</title>
+          <Link key={pin.key} href={pin.href} className="group outline-none" aria-label={pin.label}>
+            <title>{pin.label}</title>
             {/* Invisible, larger target so the pin is easy to hit. */}
             <circle cx={x} cy={y} r="13" fill="transparent" />
             <circle

@@ -12,12 +12,13 @@ photos, or rewriting the About page never involves code or a redeploy.
 ## Contents
 
 1. [Set it up](#set-it-up) (about 20 minutes, once)
-2. [Using the admin](#using-the-admin)
-3. [How it works](#how-it-works)
-4. [Free-tier limits worth knowing](#free-tier-limits-worth-knowing)
-5. [Project layout](#project-layout)
-6. [Commands](#commands)
-7. [If something goes wrong](#if-something-goes-wrong)
+2. [Updating a site that is already running](#updating-a-site-that-is-already-running)
+3. [Using the admin](#using-the-admin)
+4. [How it works](#how-it-works)
+5. [Free-tier limits worth knowing](#free-tier-limits-worth-knowing)
+6. [Project layout](#project-layout)
+7. [Commands](#commands)
+8. [If something goes wrong](#if-something-goes-wrong)
 
 ---
 
@@ -42,7 +43,10 @@ and (to put it online) free [GitHub](https://github.com) and [Vercel](https://ve
 2. Open [`supabase/migrations/20261117000000_init.sql`](supabase/migrations/20261117000000_init.sql)
    from this folder, copy all of it, paste it into the editor, and press **Run**. You should see
    "Success. No rows returned."
-3. Start another new query, paste the contents of [`supabase/seed.sql`](supabase/seed.sql), and
+3. In a new query, do the same with
+   [`supabase/migrations/20261118000000_places_duration_portrait.sql`](supabase/migrations/20261118000000_places_duration_portrait.sql)
+   (places with their own pins, trip lengths, the About portrait).
+4. Start another new query, paste the contents of [`supabase/seed.sql`](supabase/seed.sql), and
    **Run** it. This adds the four starter trips (Tromso, Chicago, Lisbon/Sintra/Algarve, Edinburgh).
 
 That first file creates everything: the `trips`, `photos` and `site_settings` tables, the rules that
@@ -124,6 +128,26 @@ From here on you only redeploy to change the code. Content changes are live the 
 
 ---
 
+## Updating a site that is already running
+
+When an update adds a new file to `supabase/migrations`, run that file once **before** deploying
+the new code. Each migration only adds things: it never deletes or rewrites your trips, photos or
+settings, and running one twice does no harm.
+
+For the places / trip length / portrait update:
+
+1. Supabase dashboard → **SQL Editor** → new query.
+2. Paste all of
+   [`supabase/migrations/20261118000000_places_duration_portrait.sql`](supabase/migrations/20261118000000_places_duration_portrait.sql)
+   and press **Run**. "Success. No rows returned." means it worked.
+3. Push the new code to GitHub; Vercel deploys it.
+
+What it does to existing content: each trip's places are copied into the new places list in the same
+order, and the trip's existing pin goes to its first place. Photos keep their order and start under
+**Not assigned** in the admin, ready to be sorted into places.
+
+---
+
 ## Using the admin
 
 Go to `/admin` and sign in.
@@ -131,33 +155,48 @@ Go to `/admin` and sign in.
 **New trip.** Press **New trip**. A draft is created straight away, so you can drop photos in before
 filling anything else out. Only the title is required. Drafts are visible only in the admin.
 
-**Details.** Title, countries (type to search, add several), cities or places, dates, tags, a short
-summary, and a longer description with bold, italics, headings, lists, quotes and links. Tick
-"I only know the month" for trips you remember as "March 2025". Press **Save**; set **Visibility** to
-Published when it should appear on the site.
+**Details.** Title, countries (type to search, add several), when (month, year, and how many days),
+tags, a short summary, and a longer description with bold, italics, headings, lists, quotes and
+links. Press **Save**; set **Visibility** to Published when it should appear on the site.
 
-**Photos.** Drag files onto the drop area, as many at once as you like. Each one is resized in your
-browser (2400px on the long edge, plus two smaller sizes), has all location data removed, and is then
-uploaded with its own progress bar. After that:
+**Places & map pins.** The cities, towns and spots on the trip, in order. Type a name and press
+Enter to add one. Each place can have its own pin: press **Find on map** and pick a result, or select
+the place and click the map, or drag its numbered pin. Untick **Route line from home** to mark a
+place on the map without drawing a line to it. Use the arrows to reorder places. Deleting a place
+keeps its photos (they move to **Not assigned**). Changes here save on their own.
 
-- drag a photo to reorder it (or focus it and use space, arrow keys, space)
+On the public site every pinned place shows on the maps, and clicking a pin opens the trip at that
+place's photos. Distances and the boarding pass use the trip's first pinned place.
+
+**Photos.** Photos belong to places. Pick a place with the buttons at the top of the Photos section,
+then drag files onto the drop area (as many at once as you like). Each one is resized in your browser
+(2400px on the long edge, plus two smaller sizes), has all location data removed, and is uploaded
+with its own progress bar. After that:
+
+- drag a photo to reorder it within its place (or focus it and use space, arrow keys, space)
 - type a caption under it; it saves when you leave the field and becomes the photo's alt text
+- use the menu under a photo to move it to another place, or tick several photos and use
+  **Move … to** to move them together
+- **Sort by location** (under **Not assigned**) puts each photo that recorded GPS into the pinned
+  place it was taken nearest to, within 100 km
 - **Make cover** picks the trip's cover; the first photo is the cover until you choose
 - **Delete** removes the photo and its files
 
 Photo changes save on their own. Only the details form uses the Save button.
 
+On the trip page, small buttons under **Photographs** show all photos (grouped by place) or one
+place at a time; the other places fade so it is clear which one you are looking at.
+
 **Dates and location from your photos.** If the photos carry a date or GPS position, a box offers to
-fill in the trip's dates, map pin, and country. The pin is rounded to about 10 km. Exact photo
-positions are stored privately and shown only to you, as grey dots on the pin map.
+fill in the month, the number of days, the country, and (if the place they went to has no pin yet)
+that place's pin, rounded to about 10 km. Exact photo positions are stored privately and shown only
+to you, as grey dots on the places map.
 
-**Map pin.** Search for a place, click the map, or drag the pin. Without a pin, the trip sits in the
-middle of its first country.
-
-**Settings.** Site name and description, the About page, your home base (routes and distances are
-measured from it; Charlotte by default), and **Other countries visited**: countries you have been
-to but have not written up yet. They are filled in on the maps and counted in the totals, so the map
-can show all of your countries from day one.
+**Settings.** Site name and description, the About page and **your photo** (shown under Home base;
+replace it any time, and add a short description for screen readers), your home base (routes and
+distances are measured from it; Charlotte by default), and **Other countries visited**: countries
+you have been to but have not written up yet. They are filled in on the maps and counted in the
+totals, so the map can show all of your countries from day one.
 
 **Deleting a trip** (bottom of its page) removes the trip, its photos, and their files for good.
 

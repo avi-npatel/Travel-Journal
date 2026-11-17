@@ -6,6 +6,7 @@ import { refreshPublicSite } from "@/app/admin/actions";
 import { loadSettings, saveSettings } from "@/lib/admin/api";
 import type { SiteSettings } from "@/lib/types";
 import { CountryPicker } from "./CountryPicker";
+import { PortraitField } from "./PortraitField";
 import { RichTextEditor } from "./RichTextEditor";
 
 type Notice = { kind: "ok" | "error"; text: string } | null;
@@ -126,6 +127,29 @@ export function SettingsForm() {
             label="About page text"
             placeholder="A few lines about you and this site."
           />
+        </div>
+
+        <div className="mt-10">
+          <p className="label">Your photo</p>
+          <PortraitField
+            portrait={settings.portrait}
+            onChange={(portrait) => set("portrait", portrait)}
+            onError={(text) => setNotice({ kind: "error", text })}
+          />
+          <label htmlFor="portrait-alt" className="label mt-6">
+            Photo description
+          </label>
+          <input
+            id="portrait-alt"
+            type="text"
+            className="field"
+            placeholder="e.g. Avi on the harbour in Tromsø"
+            value={settings.portrait_alt}
+            onChange={(event) => set("portrait_alt", event.target.value)}
+          />
+          <p className="hint">
+            Read aloud by screen readers in place of the photo. Saved with the Save settings button.
+          </p>
         </div>
       </section>
 

@@ -1,13 +1,12 @@
 import { geoDistance, geoGraticule10, geoInterpolate, geoOrthographic, geoPath } from "d3-geo";
 import { cn } from "@/lib/cn";
+import { mapPins } from "@/lib/geo";
 import { COUNTRY_OUTLINES, LAND } from "@/lib/map/atlas";
-import type { LatLng } from "@/lib/types";
+import type { LatLng, Trip, TripPlace } from "@/lib/types";
 
 interface TripGlobeProps {
-  /** Where the trip went. Null draws the globe around home with no route. */
-  point: LatLng | null;
+  trip: { places: TripPlace[] } & Pick<Trip, "country_codes">;
   home: LatLng;
-  countryCodes: string[];
   className?: string;
 }
 
@@ -18,18 +17,21 @@ const GRATICULE = geoGraticule10();
 const toLngLat = ({ lat, lng }: LatLng): [number, number] => [lng, lat];
 
 /**
- * A globe turned toward a trip's destination, with the country shaded and
- * the route from home dotted in. It stands in wherever a trip has no photo
- * yet (covers, the home hero, the empty gallery), so those spots look drawn
- * on purpose rather than missing something.
+ * A globe turned toward a trip, with its countries shaded, a pin on each of
+ * its places, and routes dotted in from home to the places that have one. It
+ * stands in wherever a trip has no photo yet (covers, the home hero, the
+ * empty gallery), so those spots look drawn on purpose.
  *
  * Decorative: whatever sits next to it carries the text.
  */
-export function TripGlobe({ point, home, countryCodes, className }: TripGlobeProps) {
-  // Look from most of the way along the route, so the destination sits near
-  // the middle and the line trails off toward home.
-  const [centerLng, centerLat] = point
-    ? geoInterpolate(toLngLat(home), toLngLat(point))(0.8)
+export function TripGlobe({ trip, home, className }: TripGlobeProps) {
+  const pins = mapPins(trip);
+  const lead = pins[0] ?? null;
+
+  // Look from most of the way along the route to the first place, so it sits
+  // near the middle and the line trails off toward home.
+  const [centerLng, centerLat] = lead
+    ? geoInterpolate(toLngLat(home), toLngLat(lead.point))(0.8)
     : toLngLat(home);
 
   const projection = geoOrthographic()
@@ -40,9 +42,11 @@ export function TripGlobe({ point, home, countryCodes, className }: TripGlobePro
   const path = geoPath(projection).digits(1);
 
   const isFacingViewer = (p: LatLng) => geoDistance(toLngLat(p), [centerLng, centerLat]) < Math.PI / 2;
-  const highlighted = COUNTRY_OUTLINES.filter((c) => c.code && countryCodes.includes(c.code));
+  const highlighted = COUNTRY_OUTLINES.filter((c) => c.code && trip.country_codes.includes(c.code));
   const homeXY = isFacingViewer(home) ? projection(toLngLat(home)) : null;
-  const pointXY = point ? projection(toLngLat(point)) : null;
+  const pinXYs = pins
+    .filter((pin) => isFacingViewer(pin.point))
+    .map((pin, index) => ({ key: pin.key, lead: index === 0, xy: projection(toLngLat(pin.point)) }));
 
   return (
     <svg
@@ -66,16 +70,19 @@ export function TripGlobe({ point, home, countryCodes, className }: TripGlobePro
         />
       ))}
 
-      {point && (
-        <path
-          d={path({ type: "LineString", coordinates: [toLngLat(home), toLngLat(point)] }) ?? ""}
-          fill="none"
-          stroke="var(--map-route)"
-          strokeWidth="1.6"
-          strokeDasharray="0.1 7"
-          strokeLinecap="round"
-        />
-      )}
+      {pins
+        .filter((pin) => pin.showRoute)
+        .map((pin) => (
+          <path
+            key={pin.key}
+            d={path({ type: "LineString", coordinates: [toLngLat(home), toLngLat(pin.point)] }) ?? ""}
+            fill="none"
+            stroke="var(--map-route)"
+            strokeWidth="1.6"
+            strokeDasharray="0.1 7"
+            strokeLinecap="round"
+          />
+        ))}
 
       {homeXY && (
         <circle
@@ -88,12 +95,19 @@ export function TripGlobe({ point, home, countryCodes, className }: TripGlobePro
         />
       )}
 
-      {pointXY && (
-        <g style={{ filter: "var(--glow-pin)" }}>
-          <circle cx={pointXY[0]} cy={pointXY[1]} r="13" fill="none" stroke="var(--pin)" strokeWidth="1.4" />
-          <circle cx={pointXY[0]} cy={pointXY[1]} r="5.5" fill="var(--pin)" />
-        </g>
-      )}
+      <g style={{ filter: "var(--glow-pin)" }}>
+        {pinXYs.map(
+          ({ key, lead: isLead, xy }) =>
+            xy && (
+              <g key={key}>
+                {isLead && (
+                  <circle cx={xy[0]} cy={xy[1]} r="13" fill="none" stroke="var(--pin)" strokeWidth="1.4" />
+                )}
+                <circle cx={xy[0]} cy={xy[1]} r={isLead ? 5.5 : 4.5} fill="var(--pin)" />
+              </g>
+            ),
+        )}
+      </g>
     </svg>
   );
 }

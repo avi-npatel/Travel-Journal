@@ -4,31 +4,38 @@
 // security is what actually permits them; a visitor calling the same code
 // would get empty results and refused writes.
 
-import { getBrowserClient } from "../supabase/browser";
 import { tripSlug } from "../slug";
-import type { Photo, PhotoLocation, SiteSettings, Trip, TripSummary } from "../types";
+import { getBrowserClient } from "../supabase/browser";
+import {
+  TRIP_COLUMNS,
+  type Photo,
+  type PhotoLocation,
+  type SiteSettings,
+  type StoredImage,
+  type Trip,
+  type TripPlace,
+  type TripSummary,
+} from "../types";
 import { removePhotoFiles } from "./upload";
 
-/** The trip fields the editor form controls. */
+/** The trip fields the details form controls. */
 export type TripFields = Pick<
   Trip,
   | "title"
   | "slug"
   | "status"
   | "country_codes"
-  | "places"
   | "tags"
   | "start_date"
-  | "end_date"
   | "date_precision"
+  | "duration_days"
   | "summary"
   | "description_html"
-  | "lat"
-  | "lng"
 >;
 
 export interface TripBundle {
   trip: Trip;
+  places: TripPlace[];
   photos: Photo[];
   locations: PhotoLocation[];
 }
@@ -59,11 +66,14 @@ export async function listTrips(): Promise<TripSummary[]> {
   const rows = check(
     await db()
       .from("trips")
-      .select("*, cover:photos!trips_cover_photo_fk(*), photo_count:photos!photos_trip_id_fkey(count)")
+      .select(
+        `${TRIP_COLUMNS}, places:trip_places(*), cover:photos!trips_cover_photo_fk(*), ` +
+          "photo_count:photos!photos_trip_id_fkey(count)",
+      )
       .order("start_date", { ascending: false, nullsFirst: true })
       .order("created_at", { ascending: false }),
     "load trips",
-  ) as unknown as (Trip & { cover: Photo | null; photo_count: { count: number }[] })[];
+  ) as unknown as (Trip & { places: TripPlace[]; cover: Photo | null; photo_count: { count: number }[] })[];
 
   return rows.map(({ photo_count, ...trip }) => ({ ...trip, photo_count: photo_count[0]?.count ?? 0 }));
 }
@@ -72,20 +82,28 @@ export async function listTrips(): Promise<TripSummary[]> {
 export async function createDraftTrip(): Promise<string> {
   const placeholderSlug = `untitled-${crypto.randomUUID().slice(0, 8)}`;
   const row = check(
-    await db().from("trips").insert({ title: "Untitled trip", slug: placeholderSlug }).select("id").single(),
+    await db()
+      .from("trips")
+      .insert({ title: "Untitled trip", slug: placeholderSlug, date_precision: "month" })
+      .select("id")
+      .single(),
     "create the trip",
   ) as { id: string };
   return row.id;
 }
 
 export async function loadTrip(id: string): Promise<TripBundle | null> {
-  const trip = check(await db().from("trips").select("*").eq("id", id).maybeSingle(), "load the trip");
+  const trip = check(
+    await db().from("trips").select(TRIP_COLUMNS).eq("id", id).maybeSingle(),
+    "load the trip",
+  ) as Trip | null;
   if (!trip) return null;
 
-  const photos = check(
-    await db().from("photos").select("*").eq("trip_id", id).order("sort_order"),
-    "load the photos",
-  ) as Photo[];
+  const [places, photos] = await Promise.all([
+    db().from("trip_places").select("*").eq("trip_id", id).order("sort_order"),
+    db().from("photos").select("*").eq("trip_id", id).order("sort_order"),
+  ]);
+  const photoRows = check(photos, "load the photos") as Photo[];
 
   const locations = check(
     await db()
@@ -93,12 +111,17 @@ export async function loadTrip(id: string): Promise<TripBundle | null> {
       .select("*")
       .in(
         "photo_id",
-        photos.map((photo) => photo.id),
+        photoRows.map((photo) => photo.id),
       ),
     "load photo locations",
   ) as PhotoLocation[];
 
-  return { trip: trip as Trip, photos, locations };
+  return {
+    trip,
+    places: check(places, "load the places") as TripPlace[],
+    photos: photoRows,
+    locations,
+  };
 }
 
 /**
@@ -128,11 +151,11 @@ export async function saveTrip(id: string, fields: TripFields): Promise<Trip> {
       .from("trips")
       .update({ ...fields, slug })
       .eq("id", id)
-      .select("*")
+      .select(TRIP_COLUMNS)
       .single(),
     "save the trip",
   );
-  return row as Trip;
+  return row as unknown as Trip;
 }
 
 export async function deleteTrip(id: string, photos: Photo[]): Promise<void> {
@@ -149,6 +172,35 @@ export async function setCoverPhoto(tripId: string, photoId: string | null): Pro
 export async function listTags(): Promise<string[]> {
   const rows = check(await db().from("trips").select("tags"), "load tags") as { tags: string[] }[];
   return [...new Set(rows.flatMap((row) => row.tags))].sort((a, b) => a.localeCompare(b));
+}
+
+// --- Places ----------------------------------------------------------------
+
+export type PlaceChanges = Partial<Pick<TripPlace, "name" | "lat" | "lng" | "show_route">>;
+
+export async function addPlace(tripId: string, name: string, sortOrder: number): Promise<TripPlace> {
+  return check(
+    await db()
+      .from("trip_places")
+      .insert({ trip_id: tripId, name, sort_order: sortOrder })
+      .select("*")
+      .single(),
+    "add the place",
+  ) as TripPlace;
+}
+
+export async function updatePlace(placeId: string, changes: PlaceChanges): Promise<void> {
+  check(await db().from("trip_places").update(changes).eq("id", placeId), "save the place");
+}
+
+/** Deletes a place. Its photos stay on the trip, unassigned. */
+export async function deletePlace(placeId: string): Promise<void> {
+  check(await db().from("trip_places").delete().eq("id", placeId), "delete the place");
+}
+
+/** Saves the order of a trip's places: they appear in the order of `placeIds`. */
+export async function savePlaceOrder(placeIds: string[]): Promise<void> {
+  check(await db().rpc("reorder_trip_places", { place_ids: placeIds }), "save the order of places");
 }
 
 // --- Photos ----------------------------------------------------------------
@@ -176,9 +228,31 @@ export async function updateCaption(photoId: string, caption: string): Promise<v
   check(await db().from("photos").update({ caption }).eq("id", photoId), "save the caption");
 }
 
-/** Saves the gallery order: photos appear in the order of `photoIds`. */
+/** Saves the order within one group: photos appear in the order of `photoIds`. */
 export async function savePhotoOrder(photoIds: string[]): Promise<void> {
   check(await db().rpc("reorder_photos", { photo_ids: photoIds }), "save the order");
+}
+
+/**
+ * Moves photos to a place (or to "not assigned" with null). They go to the
+ * end of that place's photos, in the order given.
+ */
+export async function movePhotos(
+  photoIds: string[],
+  placeId: string | null,
+  firstSortOrder: number,
+): Promise<void> {
+  // One request per photo keeps each one's new position; batches are small.
+  const results = await Promise.all(
+    photoIds.map((id, index) =>
+      db()
+        .from("photos")
+        .update({ place_id: placeId, sort_order: firstSortOrder + index })
+        .eq("id", id),
+    ),
+  );
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw new Error(`Could not move the photos: ${failed.error.message}`);
 }
 
 export async function deletePhoto(photo: Photo): Promise<void> {
@@ -202,6 +276,7 @@ export async function saveSettings(settings: SiteSettings): Promise<void> {
     home_code,
     home_lat,
     home_lng,
+    portrait_alt,
   } = settings;
   check(
     await db()
@@ -215,8 +290,14 @@ export async function saveSettings(settings: SiteSettings): Promise<void> {
         home_code,
         home_lat,
         home_lng,
+        portrait_alt,
       })
       .eq("id", true),
     "save settings",
   );
+}
+
+/** Points the About page at a newly uploaded portrait (or none). */
+export async function savePortrait(portrait: StoredImage | null): Promise<void> {
+  check(await db().from("site_settings").update({ portrait }).eq("id", true), "save the portrait");
 }

@@ -99,7 +99,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[slug]">) {
           <BoardingPass trip={trip} number={number} settings={settings} />
         </div>
 
-        {(trip.description_html || trip.places.length > 0 || trip.tags.length > 0) && (
+        {(trip.description_html || trip.tags.length > 0) && (
           <div className="mt-14 grid gap-x-12 gap-y-10 sm:mt-20 lg:grid-cols-12">
             {trip.description_html && (
               <div
@@ -109,18 +109,6 @@ export default async function TripPage({ params }: PageProps<"/trips/[slug]">) {
               />
             )}
             <aside className="space-y-8 lg:col-span-4 lg:col-start-9">
-              {trip.places.length > 0 && (
-                <div>
-                  <h2 className="meta border-b border-rule pb-2">Places</h2>
-                  <ul className="mt-3 space-y-1">
-                    {trip.places.map((place) => (
-                      <li key={place} className="font-display text-xl">
-                        {place}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
               {trip.tags.length > 0 && (
                 <div>
                   <h2 className="meta border-b border-rule pb-2">Tags</h2>
@@ -154,32 +142,31 @@ export default async function TripPage({ params }: PageProps<"/trips/[slug]">) {
           </div>
         </div>
 
-        {trip.photos.length > 0 ? (
-          // The gallery runs nearly edge to edge: the photos get the room.
-          <div className="px-1.5 sm:px-3">
-            <Gallery photos={trip.photos} tripTitle={trip.title} />
-          </div>
-        ) : (
-          // Empty state: the globe turned to this trip, so the page still has
-          // a picture and says plainly that photos are to come.
-          <div className="shell">
-            <div className="relative flex min-h-[26rem] items-end overflow-hidden border border-rule bg-sunk sm:min-h-[34rem]">
-              <TripGlobe
-                point={point}
-                home={home}
-                countryCodes={trip.country_codes}
-                className="absolute left-1/2 top-1/2 aspect-square w-[max(110%,46rem)] max-w-none -translate-x-1/2 -translate-y-1/2"
-              />
-              <div className="relative p-5 sm:p-8">
-                <p className="display text-3xl sm:text-4xl">No photos from this trip yet.</p>
-                <p className="meta mt-3 flex flex-wrap gap-x-4">
-                  {point && <span>{formatCoordinates(point)}</span>}
-                  <span>Route shown from {settings.home_name}</span>
-                </p>
+        <Gallery
+          photos={trip.photos}
+          places={trip.places}
+          tripTitle={trip.title}
+          emptyState={
+            // The globe turned to this trip, so the page still has a picture
+            // and says plainly that photos are to come.
+            <div className="shell">
+              <div className="relative flex min-h-[26rem] items-end overflow-hidden border border-rule bg-sunk sm:min-h-[34rem]">
+                <TripGlobe
+                  trip={trip}
+                  home={home}
+                  className="absolute left-1/2 top-1/2 aspect-square w-[max(110%,46rem)] max-w-none -translate-x-1/2 -translate-y-1/2"
+                />
+                <div className="relative p-5 sm:p-8">
+                  <p className="display text-3xl sm:text-4xl">No photos from this trip yet.</p>
+                  <p className="meta mt-3 flex flex-wrap gap-x-4">
+                    {point && <span>{formatCoordinates(point)}</span>}
+                    <span>Route shown from {settings.home_name}</span>
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          }
+        />
       </section>
 
       {(newer || older) && (

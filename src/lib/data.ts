@@ -7,20 +7,32 @@
 // safety net in case that call is ever missed.
 
 import { cacheLife, cacheTag } from "next/cache";
+import { orderPhotos } from "./photo-order";
 import { sanitizeRichText } from "./sanitize";
 import { createPublicClient } from "./supabase/public";
-import type { Photo, SiteSettings, Trip, TripSummary, TripWithPhotos } from "./types";
+import {
+  TRIP_COLUMNS,
+  type Photo,
+  type SiteSettings,
+  type Trip,
+  type TripPlace,
+  type TripSummary,
+  type TripWithPhotos,
+} from "./types";
 
 export const SITE_CACHE_TAG = "site";
 
 // `trips` and `photos` are linked twice (a photo belongs to a trip; a trip
 // points at its cover photo), so each embed names the foreign key it follows.
 const SUMMARY_COLUMNS =
-  "*, cover:photos!trips_cover_photo_fk(*), photo_count:photos!photos_trip_id_fkey(count)";
-const DETAIL_COLUMNS = "*, photos:photos!photos_trip_id_fkey(*)";
+  `${TRIP_COLUMNS}, places:trip_places(*), cover:photos!trips_cover_photo_fk(*), ` +
+  "photo_count:photos!photos_trip_id_fkey(count)";
+const DETAIL_COLUMNS = `${TRIP_COLUMNS}, places:trip_places(*), photos:photos!photos_trip_id_fkey(*)`;
 
-type SummaryRow = Trip & { cover: Photo | null; photo_count: { count: number }[] };
-type DetailRow = Trip & { photos: Photo[] };
+type SummaryRow = Trip & { places: TripPlace[]; cover: Photo | null; photo_count: { count: number }[] };
+type DetailRow = Trip & { places: TripPlace[]; photos: Photo[] };
+
+const byOrder = (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order;
 
 function fail(what: string, message: string): never {
   throw new Error(`Could not load ${what}: ${message}`);
@@ -52,13 +64,14 @@ export async function getPublishedTrips(): Promise<TripSummary[]> {
     .order("created_at", { ascending: false });
   if (error) fail("trips", error.message);
 
-  return (data as unknown as SummaryRow[]).map(({ photo_count, ...trip }) => ({
+  return (data as unknown as SummaryRow[]).map(({ photo_count, places, ...trip }) => ({
     ...trip,
+    places: [...places].sort(byOrder),
     photo_count: photo_count[0]?.count ?? 0,
   }));
 }
 
-/** One published trip with its photos in gallery order, or null. */
+/** One published trip with its places and photos in gallery order, or null. */
 export async function getTripBySlug(slug: string): Promise<TripWithPhotos | null> {
   "use cache";
   cacheTag(SITE_CACHE_TAG);
@@ -69,15 +82,18 @@ export async function getTripBySlug(slug: string): Promise<TripWithPhotos | null
     .select(DETAIL_COLUMNS)
     .eq("slug", slug)
     .eq("status", "published")
-    .order("sort_order", { referencedTable: "photos" })
     .maybeSingle();
   if (error) fail(`trip "${slug}"`, error.message);
   if (!data) return null;
 
   const trip = data as unknown as DetailRow;
+  const places = [...trip.places].sort(byOrder);
+  const photos = orderPhotos(trip.photos, places);
   return {
     ...trip,
+    places,
+    photos,
     description_html: sanitizeRichText(trip.description_html),
-    cover: trip.photos.find((photo) => photo.id === trip.cover_photo_id) ?? trip.photos[0] ?? null,
+    cover: photos.find((photo) => photo.id === trip.cover_photo_id) ?? photos[0] ?? null,
   };
 }

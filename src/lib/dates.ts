@@ -22,6 +22,7 @@ const monthYear = (d: CalendarDate) => `${MONTHS[d.month - 1]} ${d.year}`;
 const dayMonth = (d: CalendarDate) => `${d.day} ${MONTHS[d.month - 1]}`;
 
 type TripDates = Pick<Trip, "start_date" | "end_date" | "date_precision">;
+type TripLength = TripDates & Pick<Trip, "duration_days">;
 
 /**
  * "Mar 2026", "14 Mar 2026", "14–19 Mar 2026", "28 Feb – 4 Mar 2026",
@@ -50,12 +51,18 @@ export function tripYear(trip: Pick<Trip, "start_date">): number | null {
   return parse(trip.start_date)?.year ?? null;
 }
 
-/** Number of days the trip covers, counting both ends. Null if unknown. */
-export function tripLengthDays(trip: TripDates): number | null {
+/**
+ * How many days the trip lasted: the recorded duration, or (for trips entered
+ * with exact first and last days) the days between them. Null if unknown.
+ */
+export function tripLengthDays(trip: TripLength): number | null {
+  if (trip.duration_days) return trip.duration_days;
   if (trip.date_precision !== "day" || !trip.start_date || !trip.end_date) return null;
   const ms = Date.parse(`${trip.end_date}T00:00:00Z`) - Date.parse(`${trip.start_date}T00:00:00Z`);
   return Math.round(ms / 86_400_000) + 1;
 }
+
+export const formatDays = (days: number) => `${days} ${days === 1 ? "day" : "days"}`;
 
 /** The local calendar date of a Date, as "YYYY-MM-DD". */
 export function toDateInputValue(date: Date): string {

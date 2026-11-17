@@ -1,4 +1,5 @@
 import { tripYear } from "./dates";
+import { slugify } from "./slug";
 import type { Trip } from "./types";
 
 /** The address the site is served from, used to build absolute URLs. */
@@ -12,6 +13,10 @@ export function siteUrl(): string {
 }
 
 export const tripPath = (trip: Pick<Trip, "slug">) => `/trips/${trip.slug}`;
+
+/** Link to a trip opened at one place's photos (the gallery reads the #place-… part). */
+export const placePath = (trip: Pick<Trip, "slug">, placeName: string | null) =>
+  placeName ? `${tripPath(trip)}#place-${slugify(placeName)}` : tripPath(trip);
 
 /**
  * Numbers trips in the order they happened: the earliest is 1. Shown as

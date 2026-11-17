@@ -5,20 +5,20 @@ import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { refreshPublicSite } from "@/app/admin/actions";
-import { deleteTrip, listTags, loadTrip, saveTrip, type TripFields } from "@/lib/admin/api";
+import { deleteTrip, listTags, loadTrip, saveTrip, updatePlace, type TripFields } from "@/lib/admin/api";
 import type { TripSuggestion } from "@/lib/admin/exif";
 import { countryName } from "@/lib/countries";
-import { formatTripDates } from "@/lib/dates";
+import { formatDays, formatTripDates, tripLengthDays } from "@/lib/dates";
 import { formatCoordinates } from "@/lib/geo";
 import { slugify, tripSlug } from "@/lib/slug";
-import type { Photo, PhotoLocation, Trip } from "@/lib/types";
+import type { Photo, PhotoLocation, Trip, TripPlace } from "@/lib/types";
 import { ChipInput } from "./ChipInput";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CountryPicker } from "./CountryPicker";
-import { LocationPicker } from "./LocationPicker";
 import { PhotoManager } from "./PhotoManager";
+import { PlacesEditor } from "./PlacesEditor";
 import { RichTextEditor } from "./RichTextEditor";
-import { TripDatesField } from "./TripDatesField";
+import { MAX_DURATION_DAYS, TripDatesField } from "./TripDatesField";
 
 type Notice = { kind: "ok" | "error"; text: string } | null;
 
@@ -29,20 +29,32 @@ const FIELD_KEYS = [
   "slug",
   "status",
   "country_codes",
-  "places",
   "tags",
   "start_date",
-  "end_date",
   "date_precision",
+  "duration_days",
   "summary",
   "description_html",
-  "lat",
-  "lng",
 ] as const satisfies readonly (keyof TripFields)[];
 
-/** The part of a trip row that the form edits. */
+/**
+ * The part of a trip row that the form edits. Trips are recorded by month
+ * and length; one entered with exact days (before lengths existed) is shown
+ * as its month and its number of days, and saved that way.
+ */
 function fieldsOf(trip: Trip): TripFields {
-  return Object.fromEntries(FIELD_KEYS.map((key) => [key, trip[key]])) as TripFields;
+  const fields = Object.fromEntries(FIELD_KEYS.map((key) => [key, trip[key]])) as TripFields;
+  return {
+    ...fields,
+    start_date: trip.start_date ? `${trip.start_date.slice(0, 7)}-01` : null,
+    date_precision: "month",
+    duration_days: tripLengthDays(trip),
+  };
+}
+
+/** Days from the first to the last of two "YYYY-MM-DD" dates, counting both. */
+function daysBetween(start: string, end: string): number {
+  return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
 /** A fresh draft is created with this title; it is cleared for typing. */
@@ -58,11 +70,14 @@ export function TripEditor({ tripId }: { tripId: string }) {
   const router = useRouter();
   const [form, setForm] = useState<TripFields | null>(null);
   const [saved, setSaved] = useState<TripFields | null>(null);
+  const [places, setPlaces] = useState<TripPlace[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [locations, setLocations] = useState<PhotoLocation[]>([]);
   const [coverId, setCoverId] = useState<string | null>(null);
   const [knownTags, setKnownTags] = useState<string[]>([]);
-  const [suggestion, setSuggestion] = useState<TripSuggestion | null>(null);
+  const [suggestion, setSuggestion] = useState<{ found: TripSuggestion; placeId: string | null } | null>(
+    null,
+  );
 
   const [loadState, setLoadState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [saving, setSaving] = useState(false);
@@ -88,6 +103,7 @@ export function TripEditor({ tripId }: { tripId: string }) {
 
         setForm(initial);
         setSaved(initial);
+        setPlaces(bundle.places);
         setPhotos(bundle.photos);
         setLocations(bundle.locations);
         setCoverId(bundle.trip.cover_photo_id);
@@ -132,6 +148,27 @@ export function TripEditor({ tripId }: { tripId: string }) {
     [],
   );
 
+  const photoCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const photo of photos) {
+      if (photo.place_id) counts.set(photo.place_id, (counts.get(photo.place_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [photos]);
+
+  // The place's photos stay on the trip; the database has already unassigned them.
+  const unassignPhotosOf = useCallback(
+    (placeId: string) =>
+      setPhotos((current) =>
+        current.map((photo) => (photo.place_id === placeId ? { ...photo, place_id: null } : photo)),
+      ),
+    [],
+  );
+  const offerSuggestion = useCallback(
+    (found: TripSuggestion, placeId: string | null) => setSuggestion({ found, placeId }),
+    [],
+  );
+
   // Only photos that still exist; deleting a photo deletes its location too.
   const photoPoints = useMemo(() => {
     const ids = new Set(photos.map((photo) => photo.id));
@@ -163,7 +200,6 @@ export function TripEditor({ tripId }: { tripId: string }) {
     setForm((current) => (current ? { ...current, [key]: value } : current));
 
   const shownSlug = slugFollowsTitle ? tripSlug(form.title, form.start_date) : form.slug;
-  const point = form.lat !== null && form.lng !== null ? { lat: form.lat, lng: form.lng } : null;
 
   async function save(event?: FormEvent) {
     event?.preventDefault();
@@ -173,10 +209,6 @@ export function TripEditor({ tripId }: { tripId: string }) {
     if (!title) {
       setNotice({ kind: "error", text: "Give the trip a title before saving." });
       document.getElementById("title")?.focus();
-      return;
-    }
-    if (form.start_date && form.end_date && form.end_date < form.start_date) {
-      setNotice({ kind: "error", text: "The last day is before the first day." });
       return;
     }
 
@@ -218,25 +250,39 @@ export function TripEditor({ tripId }: { tripId: string }) {
     }
   }
 
-  function applySuggestion(parts: { dates?: boolean; pin?: boolean; country?: boolean }) {
+  async function applySuggestion(parts: { dates?: boolean; pin?: boolean; country?: boolean }) {
     if (!suggestion) return;
+    const { found, placeId } = suggestion;
     setForm((current) => {
       if (!current) return current;
       const next = { ...current };
-      if (parts.dates && suggestion.startDate) {
-        next.start_date = suggestion.startDate;
-        next.end_date = suggestion.endDate;
-        next.date_precision = "day";
+      if (parts.dates && found.startDate) {
+        next.start_date = `${found.startDate.slice(0, 7)}-01`;
+        next.date_precision = "month";
+        if (found.endDate) {
+          next.duration_days = Math.min(daysBetween(found.startDate, found.endDate), MAX_DURATION_DAYS);
+        }
       }
-      if (parts.pin && suggestion.point) {
-        next.lat = suggestion.point.lat;
-        next.lng = suggestion.point.lng;
-      }
-      if (parts.country && suggestion.countryCode && !next.country_codes.includes(suggestion.countryCode)) {
-        next.country_codes = [...next.country_codes, suggestion.countryCode];
+      if (parts.country && found.countryCode && !next.country_codes.includes(found.countryCode)) {
+        next.country_codes = [...next.country_codes, found.countryCode];
       }
       return next;
     });
+
+    // A place's pin saves straight away, like everything in the Places section.
+    const place = places.find((p) => p.id === placeId);
+    const point = found.point;
+    if (parts.pin && point && place && place.lat === null) {
+      try {
+        await updatePlace(place.id, { lat: point.lat, lng: point.lng });
+        setPlaces((current) =>
+          current.map((p) => (p.id === place.id ? { ...p, lat: point.lat, lng: point.lng } : p)),
+        );
+        refreshSoon();
+      } catch (error) {
+        setNotice({ kind: "error", text: describe(error) });
+      }
+    }
   }
 
   const saveLabel = saving
@@ -302,26 +348,11 @@ export function TripEditor({ tripId }: { tripId: string }) {
             </div>
 
             <div>
-              <label htmlFor="places" className="label">
-                Cities or places
-              </label>
-              <ChipInput
-                id="places"
-                value={form.places}
-                onChange={(places) => set("places", places)}
-                placeholder="Type a place, then Enter"
-              />
-              <p className="hint">Press Enter after each one.</p>
-            </div>
-
-            <div>
               <TripDatesField
-                value={{
-                  start_date: form.start_date,
-                  end_date: form.end_date,
-                  date_precision: form.date_precision,
-                }}
-                onChange={(dates) => setForm((current) => (current ? { ...current, ...dates } : current))}
+                value={{ start_date: form.start_date, duration_days: form.duration_days }}
+                onChange={(when) =>
+                  setForm((current) => (current ? { ...current, ...when, date_precision: "month" } : current))
+                }
               />
             </div>
 
@@ -424,26 +455,6 @@ export function TripEditor({ tripId }: { tripId: string }) {
           </div>
         </section>
 
-        {/* --- Map pin ------------------------------------------------------ */}
-        <section aria-labelledby="pin-heading" className="mt-14 border-t border-ink pt-6">
-          <h2 id="pin-heading" className="display text-3xl">
-            Map pin
-          </h2>
-          <p className="hint max-w-2xl">
-            Where this trip appears on the public map, and where its distance is measured to.
-          </p>
-          <div className="mt-5 max-w-3xl">
-            <LocationPicker
-              value={point}
-              onChange={(next) =>
-                setForm((c) => (c ? { ...c, lat: next?.lat ?? null, lng: next?.lng ?? null } : c))
-              }
-              countryCodes={form.country_codes}
-              photoPoints={photoPoints}
-            />
-          </div>
-        </section>
-
         {/* --- Save bar ------------------------------------------------------ */}
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-rule bg-paper">
           <div className="shell flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-2.5">
@@ -464,6 +475,33 @@ export function TripEditor({ tripId }: { tripId: string }) {
         </div>
       </form>
 
+      {/* --- Places (outside the form: they save on their own) -------------- */}
+      <section aria-labelledby="places-heading" className="mt-14 border-t border-ink pt-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 id="places-heading" className="display text-3xl">
+            Places &amp; map pins
+          </h2>
+          <p className="meta">changes here save automatically</p>
+        </div>
+        <p className="hint max-w-2xl">
+          The cities, towns and spots on this trip, in order. Give a place a pin to show it on the map, and
+          choose whether a route line is drawn to it from home.
+        </p>
+        <div className="mt-6">
+          <PlacesEditor
+            tripId={tripId}
+            places={places}
+            setPlaces={setPlaces}
+            countryCodes={form.country_codes}
+            photoPoints={photoPoints}
+            photoCounts={photoCounts}
+            onSaved={refreshSoon}
+            onError={showError}
+            onPlaceDeleted={unassignPhotosOf}
+          />
+        </div>
+      </section>
+
       {/* --- Photos (outside the form: they save on their own) -------------- */}
       <section aria-labelledby="photos-heading" className="mt-14 border-t border-ink pt-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -477,7 +515,8 @@ export function TripEditor({ tripId }: { tripId: string }) {
 
         {suggestion && (
           <ExifSuggestion
-            suggestion={suggestion}
+            suggestion={suggestion.found}
+            pinPlace={places.find((place) => place.id === suggestion.placeId && place.lat === null) ?? null}
             onApply={applySuggestion}
             onDismiss={() => setSuggestion(null)}
           />
@@ -486,12 +525,14 @@ export function TripEditor({ tripId }: { tripId: string }) {
         <div className="mt-6">
           <PhotoManager
             tripId={tripId}
+            places={places}
             photos={photos}
             setPhotos={setPhotos}
+            locations={locations}
             coverId={coverId}
             setCoverId={setCoverId}
             onLocationsAdded={addLocations}
-            onSuggestion={setSuggestion}
+            onSuggestion={offerSuggestion}
             onSaved={refreshSoon}
             onError={showError}
           />
@@ -529,15 +570,24 @@ export function TripEditor({ tripId }: { tripId: string }) {
 
 interface ExifSuggestionProps {
   suggestion: TripSuggestion;
+  /** The place the photos went to, if it has no pin yet (the pin can go there). */
+  pinPlace: TripPlace | null;
   onApply: (parts: { dates?: boolean; pin?: boolean; country?: boolean }) => void;
   onDismiss: () => void;
 }
 
 /** Offers to fill the form from what the uploaded photos recorded. */
-function ExifSuggestion({ suggestion, onApply, onDismiss }: ExifSuggestionProps) {
-  const { startDate, endDate, point, countryCode } = suggestion;
+function ExifSuggestion({ suggestion, pinPlace, onApply, onDismiss }: ExifSuggestionProps) {
+  const { startDate, endDate, countryCode } = suggestion;
+  const point = pinPlace ? suggestion.point : null;
+  const days = startDate && endDate ? daysBetween(startDate, endDate) : null;
   const dates = startDate
-    ? formatTripDates({ start_date: startDate, end_date: endDate, date_precision: "day" })
+    ? [
+        formatTripDates({ start_date: startDate, end_date: null, date_precision: "month" }),
+        days && formatDays(days),
+      ]
+        .filter(Boolean)
+        .join(", ")
     : null;
 
   return (
@@ -549,14 +599,14 @@ function ExifSuggestion({ suggestion, onApply, onDismiss }: ExifSuggestionProps)
       <p className="meta meta-ink">Found in your photos</p>
       <p className="mt-2 text-sm text-soft">
         {suggestion.withDate} of {suggestion.total} carry a date and {suggestion.withLocation} carry a
-        location. Use them to fill in the details above? Nothing is saved until you press Save.
+        location. Use them to fill in the details above? Details are saved when you press Save.
       </p>
 
       <ul className="mt-4 space-y-2.5">
         {dates && <SuggestionRow label="Dates" value={dates} onApply={() => onApply({ dates: true })} />}
         {point && (
           <SuggestionRow
-            label="Map pin"
+            label={`Pin for ${pinPlace?.name}`}
             value={`${formatCoordinates(point, 1)} (rounded to about 10 km)`}
             onApply={() => onApply({ pin: true })}
           />

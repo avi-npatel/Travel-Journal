@@ -6,7 +6,7 @@ import { Photo } from "./Photo";
 import { TripGlobe } from "./TripGlobe";
 
 interface TripCoverProps {
-  trip: Pick<TripSummary, "title" | "cover" | "lat" | "lng" | "country_codes">;
+  trip: Pick<TripSummary, "title" | "cover" | "places" | "country_codes">;
   home: LatLng;
   sizes: string;
   /** Sets the shape: "aspect-[3/2]", or "size-full" to fill a sized parent. */
@@ -16,7 +16,7 @@ interface TripCoverProps {
 
 /**
  * The picture that represents a trip in lists: its cover photo, or, until it
- * has one, a globe turned to where the trip went.
+ * has one, a globe turned to where the trip went, with its pins.
  */
 export function TripCover({ trip, home, sizes, className, preload }: TripCoverProps) {
   if (trip.cover) {
@@ -38,9 +38,8 @@ export function TripCover({ trip, home, sizes, className, preload }: TripCoverPr
   return (
     <div className={cn("relative overflow-hidden bg-sunk", className)}>
       <TripGlobe
-        point={point}
+        trip={trip}
         home={home}
-        countryCodes={trip.country_codes}
         className="absolute left-1/2 top-1/2 size-[135%] max-w-none -translate-x-1/2 -translate-y-1/2"
       />
       <p className="meta absolute left-3 top-3">No photos yet</p>

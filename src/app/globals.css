@@ -28,9 +28,11 @@
   /* Maps */
   --map-water: #f4efe6;
   --map-land: #e2dacb;
-  --map-border: #f4efe6;
+  /* Borders: a warm grey between plain countries, paper-white hairlines
+     between visited ones (so neighbouring red countries stay separate). */
+  --map-border: #b3a893;
   --map-visited: #be2f16;
-  --map-visited-line: #be2f16;
+  --map-visited-line: #f8f4ec;
   --map-route: #17140f;
   --map-graticule: #d9d1c2;
 
@@ -60,7 +62,8 @@
   --map-border: #0a0b0d;
   --map-visited: #4a1613;
   --map-visited-line: #ff4438;
-  --map-route: #ff4438;
+  /* Route lines stay neutral so they still read once much of the map is red. */
+  --map-route: #d8d4cb;
   --map-graticule: #1b1e23;
 
   --glow-text: 0 0 22px rgb(255 68 56 / 0.5);
@@ -753,6 +756,14 @@
   }
 }
 
+/* Photos appearing after a place is picked: a short staggered rise. */
+@media (prefers-reduced-motion: no-preference) {
+  .gallery-enter {
+    animation: rise-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(min(var(--i, 0), 14) * 35ms);
+  }
+}
+
 /* ------------------------------------------------------------------------
    Lightbox
    ------------------------------------------------------------------------ */
@@ -810,48 +821,93 @@
    Maps
    ------------------------------------------------------------------------ */
 
+/* MapLibre positions each marker by setting a transform on the outer element,
+   so that element must never be scaled or moved by our CSS: a scale there
+   multiplies the map offset too and sends the pin across the map. All hover
+   effects live on the inner .map-pin-dot instead. */
 .map-pin {
   display: block;
   width: 22px;
   height: 22px;
-  border-radius: 50%;
   cursor: pointer;
+}
+
+/* The marker element is .map-pin itself; z-index does not move it. */
+.map-pin:hover,
+.map-pin:focus-visible,
+.map-pin[data-active="true"] {
+  z-index: 2;
+}
+
+.map-pin-dot {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
   /* The visible dot is smaller than the 22px hit area. */
   background: radial-gradient(circle, var(--pin) 0 4.5px, var(--paper) 5px 6.5px, transparent 7px);
   filter: var(--glow-pin);
-  transition: scale 0.18s ease-out;
+  transition: transform 0.18s ease-out;
 }
 
-.map-pin::after {
+.map-pin-dot::after {
   content: "";
   position: absolute;
   inset: 3px;
   border: 1.5px solid var(--pin);
   border-radius: 50%;
   opacity: 0;
-  scale: 0.6;
+  transform: scale(0.6);
   transition:
     opacity 0.18s,
-    scale 0.18s;
+    transform 0.18s;
 }
 
-.map-pin:hover,
-.map-pin:focus-visible,
-.map-pin[data-active="true"] {
-  scale: 1.25;
-  z-index: 2;
+.map-pin:hover .map-pin-dot,
+.map-pin:focus-visible .map-pin-dot,
+.map-pin[data-active="true"] .map-pin-dot {
+  transform: scale(1.3);
 }
 
-.map-pin:hover::after,
-.map-pin:focus-visible::after,
-.map-pin[data-active="true"]::after {
+.map-pin:hover .map-pin-dot::after,
+.map-pin:focus-visible .map-pin-dot::after,
+.map-pin[data-active="true"] .map-pin-dot::after {
   opacity: 1;
-  scale: 1;
+  transform: scale(1);
 }
 
 .map-pin:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  border-radius: 50%;
+}
+
+/* Numbered pins in the admin's place editor. */
+.map-pin-number {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% - 2px);
+  transform: translateX(-50%);
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 15px;
+  pointer-events: none;
+}
+
+.map-pin[data-active="true"] .map-pin-number {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Labels over hovered pins are for reading only; letting the pointer pass
+   through stops them from stealing the hover and flickering. */
+.maplibregl-popup {
+  pointer-events: none;
 }
 
 .maplibregl-map {

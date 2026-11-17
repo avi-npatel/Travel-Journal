@@ -74,9 +74,8 @@ export function HomeHero({ trip, number, isLatest, settings }: HomeHeroProps) {
   return (
     <section className="relative flex min-h-[64svh] items-end overflow-hidden border-b border-rule md:min-h-[78svh]">
       <TripGlobe
-        point={point}
+        trip={trip}
         home={home}
-        countryCodes={trip.country_codes}
         className="absolute -right-[22%] top-1/2 aspect-square w-[min(118svh,105vw)] -translate-y-1/2 md:-right-[6%]"
       />
       {text}

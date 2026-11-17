@@ -11,6 +11,8 @@ interface LightboxProps {
   photos: Photo[];
   index: number;
   tripTitle: string;
+  /** Place names by place id, shown next to the photo count. */
+  placeNames?: Map<string, string>;
   onIndexChange: (index: number) => void;
   onClose: () => void;
 }
@@ -27,7 +29,7 @@ const SWIPE_THRESHOLD_PX = 60;
  * and End), swipe on touch screens, captions, and preloading of the photos on
  * either side so stepping through feels instant.
  */
-export function Lightbox({ photos, index, tripTitle, onIndexChange, onClose }: LightboxProps) {
+export function Lightbox({ photos, index, tripTitle, placeNames, onIndexChange, onClose }: LightboxProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const dragStartX = useRef<number | null>(null);
   const didSwipe = useRef(false);
@@ -111,6 +113,9 @@ export function Lightbox({ photos, index, tripTitle, onIndexChange, onClose }: L
           <p className="meta text-[#b9b6ae]" aria-live="polite">
             <span className="sr-only">Photo </span>
             {position}
+            {photo.place_id && placeNames?.get(photo.place_id) && (
+              <span className="ml-3 text-[#ecebe6]">{placeNames.get(photo.place_id)}</span>
+            )}
           </p>
           <button
             type="button"

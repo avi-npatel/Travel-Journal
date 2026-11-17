@@ -3,7 +3,8 @@ import { InteractiveMap, type MapPageTrip } from "@/components/site/InteractiveM
 import { countryNames } from "@/lib/countries";
 import { getPublishedTrips, getSettings } from "@/lib/data";
 import { formatTripDates } from "@/lib/dates";
-import { homePoint, tripPoint } from "@/lib/geo";
+import { homePoint, mapPins } from "@/lib/geo";
+import { placePath } from "@/lib/site";
 import { computeStats, visitedCountryCodes } from "@/lib/stats";
 
 export const metadata: Metadata = {
@@ -20,7 +21,13 @@ export default async function MapPage() {
     title: trip.title,
     dateLabel: formatTripDates(trip),
     countryLabel: countryNames(trip.country_codes).join(", "),
-    point: tripPoint(trip),
+    pins: mapPins(trip).map((pin) => ({
+      key: pin.key,
+      name: pin.name,
+      href: placePath(trip, pin.name),
+      point: pin.point,
+      showRoute: pin.showRoute,
+    })),
   }));
 
   return (

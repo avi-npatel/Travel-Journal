@@ -10,13 +10,21 @@ import { cn } from "@/lib/cn";
 import { addRoutes, createCountryMap } from "@/lib/map/country-map";
 import type { LatLng } from "@/lib/types";
 
+export interface MapPagePin {
+  key: string;
+  /** The place's name; null for a trip pinned only by its country. */
+  name: string | null;
+  href: string;
+  point: LatLng;
+  showRoute: boolean;
+}
+
 export interface MapPageTrip {
   slug: string;
   title: string;
   dateLabel: string | null;
   countryLabel: string;
-  /** Null when the trip has neither coordinates nor a country. */
-  point: LatLng | null;
+  pins: MapPagePin[];
 }
 
 interface InteractiveMapProps {
@@ -29,15 +37,17 @@ type Projection = "mercator" | "globe";
 type Status = "loading" | "ready" | "error";
 
 /**
- * The map page: visited countries filled in, a pin per trip, routes from
- * home. Pins are real links, so they can be reached and opened from the
- * keyboard, and the list beside the map offers the same trips as text.
+ * The map page: visited countries filled in, a pin for every place, routes
+ * from home to the places that have one. Pins are real links, so they can be
+ * reached and opened from the keyboard, and the list beside the map offers
+ * the same trips as text. Hovering a trip in the list lights up its pins.
  */
 export function InteractiveMap({ trips, visitedCodes, home }: InteractiveMapProps) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const pinsRef = useRef(new Map<string, HTMLElement>());
+  /** Every pin element, by trip slug. */
+  const pinsRef = useRef(new Map<string, HTMLElement[]>());
   const [status, setStatus] = useState<Status>("loading");
   const [projection, setProjection] = useState<Projection>("mercator");
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
@@ -45,7 +55,7 @@ export function InteractiveMap({ trips, visitedCodes, home }: InteractiveMapProp
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const pins = pinsRef.current;
+    const pinElements = pinsRef.current;
     let cancelled = false;
     let destroy: (() => void) | undefined;
 
@@ -58,49 +68,61 @@ export function InteractiveMap({ trips, visitedCodes, home }: InteractiveMapProp
 
         map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
-        const pinned = trips.filter((trip): trip is MapPageTrip & { point: LatLng } => trip.point !== null);
+        const allPins = trips.flatMap((trip) => trip.pins);
         addRoutes(
           map,
           home,
-          pinned.map((trip) => trip.point),
+          allPins.filter((pin) => pin.showRoute).map((pin) => pin.point),
         );
 
         const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 16 });
 
-        for (const trip of pinned) {
-          const pin = document.createElement("a");
-          pin.href = `/trips/${trip.slug}`;
-          pin.className = "map-pin";
-          pin.setAttribute("aria-label", [trip.title, trip.dateLabel].filter(Boolean).join(", "));
+        for (const trip of trips) {
+          const elements: HTMLElement[] = [];
+          for (const pin of trip.pins) {
+            const element = document.createElement("a");
+            element.href = pin.href;
+            element.className = "map-pin";
+            element.setAttribute(
+              "aria-label",
+              [pin.name, trip.title, trip.dateLabel].filter(Boolean).join(", "),
+            );
+            // The marker element is positioned by MapLibre; everything that
+            // grows on hover lives on this inner dot (see globals.css).
+            const dot = document.createElement("span");
+            dot.className = "map-pin-dot";
+            element.append(dot);
 
-          const lngLat: [number, number] = [trip.point.lng, trip.point.lat];
-          const showLabel = () => {
-            setActiveSlug(trip.slug);
-            popup.setLngLat(lngLat).setDOMContent(pinLabel(trip)).addTo(map);
-          };
-          const hideLabel = () => {
-            setActiveSlug(null);
-            popup.remove();
-          };
-          pin.addEventListener("mouseenter", showLabel);
-          pin.addEventListener("mouseleave", hideLabel);
-          pin.addEventListener("focus", showLabel);
-          pin.addEventListener("blur", hideLabel);
-          pin.addEventListener("click", (event) => {
-            // Client-side navigation unless the visitor wants a new tab.
-            if (event.metaKey || event.ctrlKey || event.shiftKey) return;
-            event.preventDefault();
-            router.push(`/trips/${trip.slug}`);
-          });
+            const lngLat: [number, number] = [pin.point.lng, pin.point.lat];
+            const showLabel = () => {
+              setActiveSlug(trip.slug);
+              popup.setLngLat(lngLat).setDOMContent(pinLabel(trip, pin)).addTo(map);
+            };
+            const hideLabel = () => {
+              setActiveSlug(null);
+              popup.remove();
+            };
+            element.addEventListener("mouseenter", showLabel);
+            element.addEventListener("mouseleave", hideLabel);
+            element.addEventListener("focus", showLabel);
+            element.addEventListener("blur", hideLabel);
+            element.addEventListener("click", (event) => {
+              // Client-side navigation unless the visitor wants a new tab.
+              if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+              event.preventDefault();
+              router.push(pin.href);
+            });
 
-          new maplibregl.Marker({ element: pin }).setLngLat(lngLat).addTo(map);
-          pins.set(trip.slug, pin);
+            new maplibregl.Marker({ element }).setLngLat(lngLat).addTo(map);
+            elements.push(element);
+          }
+          pinElements.set(trip.slug, elements);
         }
 
         // Start framed on home plus every pin.
-        if (pinned.length > 0) {
+        if (allPins.length > 0) {
           const bounds = new maplibregl.LngLatBounds([home.lng, home.lat], [home.lng, home.lat]);
-          for (const trip of pinned) bounds.extend([trip.point.lng, trip.point.lat]);
+          for (const pin of allPins) bounds.extend([pin.point.lng, pin.point.lat]);
           map.fitBounds(bounds, { padding: 72, maxZoom: 4, animate: false });
         }
 
@@ -118,7 +140,7 @@ export function InteractiveMap({ trips, visitedCodes, home }: InteractiveMapProp
 
     return () => {
       cancelled = true;
-      pins.clear();
+      pinElements.clear();
       mapRef.current = null;
       destroy?.();
     };
@@ -126,9 +148,11 @@ export function InteractiveMap({ trips, visitedCodes, home }: InteractiveMapProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mirror list hover onto the matching pin.
+  // Light up every pin of the trip hovered in the list (or on the map).
   useEffect(() => {
-    pinsRef.current.forEach((pin, slug) => pin.setAttribute("data-active", String(slug === activeSlug)));
+    pinsRef.current.forEach((elements, slug) => {
+      for (const element of elements) element.setAttribute("data-active", String(slug === activeSlug));
+    });
   }, [activeSlug]);
 
   function changeProjection(next: Projection) {
@@ -216,14 +240,16 @@ export function InteractiveMap({ trips, visitedCodes, home }: InteractiveMapProp
 }
 
 /** Contents of the label that appears over a hovered or focused pin. */
-function pinLabel(trip: MapPageTrip): HTMLElement {
+function pinLabel(trip: MapPageTrip, pin: MapPagePin): HTMLElement {
   const label = document.createElement("div");
   const title = document.createElement("p");
   title.className = "display text-xl";
-  title.textContent = trip.title;
+  title.textContent = pin.name ?? trip.title;
   const detail = document.createElement("p");
   detail.className = "meta mt-1";
-  detail.textContent = [trip.dateLabel, trip.countryLabel].filter(Boolean).join(" · ");
+  detail.textContent = [pin.name ? trip.title : null, trip.dateLabel, pin.name ? null : trip.countryLabel]
+    .filter(Boolean)
+    .join(" · ");
   label.append(title, detail);
   return label;
 }
